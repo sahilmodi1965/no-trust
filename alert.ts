@@ -8,15 +8,27 @@ import { loadConfig } from './config.ts';
 
 export type AlertLevel = 'WATCH' | 'WARNING' | 'EXIT-NOW';
 
+export interface MacroData {
+  name: string;
+  flag: string;
+  index: string;
+  price: number;
+  changePct: number;
+  assessment: string;
+}
+
 export interface AlertPayload {
   level: AlertLevel;
   dangerScore: number;
   signals: { name: string; score: number; detail: string }[];
   timestamp: string;
+  action?: string;
+  macro?: MacroData[];
 }
 
 // ANSI color helpers
 const RED = '\x1b[91m';
+const GREEN = '\x1b[92m';
 const YELLOW = '\x1b[93m';
 const CYAN = '\x1b[96m';
 const BOLD = '\x1b[1m';
@@ -24,24 +36,55 @@ const DIM = '\x1b[2m';
 const RESET = '\x1b[0m';
 const BG_RED = '\x1b[41m';
 
-/** Format the alert message as plain text for all channels. */
+/** Format the full 6-hour briefing message for Telegram/Discord. */
 function formatMessage(payload: AlertPayload): string {
   const header = payload.level === 'EXIT-NOW'
     ? '🚨 EXIT-NOW ALERT 🚨'
     : payload.level === 'WARNING'
       ? '⚠️ WARNING'
-      : '👀 WATCH';
+      : payload.dangerScore < 30
+        ? '✅ ALL CLEAR'
+        : '👀 WATCH';
 
   const lines = [
-    header,
-    `Danger Score: ${payload.dangerScore}/100`,
-    `Time: ${payload.timestamp}`,
+    `📊 no-trust — Market Brief`,
+    `━━━━━━━━━━━━━━━━━━━━━━`,
     '',
-    'Signals:',
-    ...payload.signals.map(
-      (s) => `  ${s.name}: ${s.score}/100 — ${s.detail}`
-    ),
+    `${header}`,
+    `Danger Score: ${payload.dangerScore}/100`,
   ];
+
+  // Action headline
+  if (payload.action) {
+    lines.push(`💡 Action: ${payload.action}`);
+  }
+
+  lines.push('');
+
+  // Macro analysis
+  if (payload.macro && payload.macro.length > 0) {
+    lines.push('🌍 Macro Analysis');
+    lines.push('─────────────────');
+    for (const m of payload.macro) {
+      const sign = m.changePct >= 0 ? '+' : '';
+      lines.push(`${m.flag} ${m.name}`);
+      lines.push(`   ${m.index}: ${m.price > 0 ? m.price.toLocaleString() : 'N/A'} (${sign}${m.changePct.toFixed(2)}%)`);
+      lines.push(`   ${m.assessment}`);
+    }
+    lines.push('');
+  }
+
+  // Signals
+  lines.push('⚡ Signals');
+  lines.push('─────────────────');
+  for (const s of payload.signals) {
+    const bar = s.score >= 75 ? '🔴' : s.score >= 50 ? '🟡' : s.score >= 25 ? '🟠' : '🟢';
+    lines.push(`${bar} ${s.name}: ${s.score}/100 — ${s.detail}`);
+  }
+
+  lines.push('');
+  lines.push(`⏱ ${new Date(payload.timestamp).toUTCString()}`);
+  lines.push(`⚠️ Not financial advice`);
 
   return lines.join('\n');
 }
@@ -129,10 +172,12 @@ export async function sendAlert(payload: AlertPayload, dryRun = false): Promise<
   // Telegram — skip if token or chat ID not configured
   if (config.telegram_token && config.telegram_chat_id) {
     await alertTelegram(payload, config.telegram_token, config.telegram_chat_id);
+    console.log(`${GREEN}  ✓ Telegram briefing sent${RESET}`);
   }
 
   // Discord — skip if webhook not configured
   if (config.discord_webhook) {
     await alertDiscord(payload, config.discord_webhook);
+    console.log(`${GREEN}  ✓ Discord briefing sent${RESET}`);
   }
 }

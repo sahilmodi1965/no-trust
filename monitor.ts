@@ -1,9 +1,9 @@
 #!/usr/bin/env npx tsx
 /**
  * no-trust monitor — main loop orchestrator.
- * Runs all signal fetchers in parallel, computes composite danger score,
- * and dispatches alerts when thresholds are crossed.
- * Zero npm dependencies. Execute: npx tsx tools/no-trust/monitor.ts
+ * Runs all signal fetchers + macro analysis in parallel every 6 hours,
+ * computes danger score, picks an action headline, and sends a full
+ * briefing to Telegram. Zero npm dependencies.
  */
 
 import { loadConfig } from './config.ts';
@@ -11,6 +11,7 @@ import { fetchVIX } from './signals/vix.ts';
 import { fetchCrypto } from './signals/crypto.ts';
 import { fetchNews } from './signals/news.ts';
 import { fetchMarket } from './signals/market.ts';
+import { fetchMacro } from './signals/macro.ts';
 import { sendAlert } from './alert.ts';
 import type { AlertLevel, AlertPayload } from './alert.ts';
 
@@ -26,30 +27,37 @@ const RESET = '\x1b[0m';
 // Known signal names — throw on unrecognized names to catch typos
 const KNOWN_SIGNALS = new Set(['VIX', 'CRYPTO', 'NEWS', 'S&P 500']);
 
+/** Map danger score to an action headline. */
+function getAction(score: number): string {
+  if (score >= 75) return '🔴 SELL EVERYTHING';
+  if (score >= 55) return '🟠 SELL A FEW THINGS';
+  if (score >= 35) return '🟡 HOLD STEADY';
+  if (score >= 20) return '🟢 BUY SOMETHING';
+  return '💚 BUY MORE';
+}
+
 /** Print the startup banner. */
 function printBanner(): void {
   const width = 60;
   console.log(`${CYAN}${BOLD}${'═'.repeat(width)}${RESET}`);
   console.log(`${CYAN}${BOLD}  no-trust market exit monitor${RESET}`);
-  console.log(`${CYAN}${BOLD}  Autonomy Level 1 — agent-in-terminal${RESET}`);
+  console.log(`${CYAN}${BOLD}  Sends a full briefing every 6 hours${RESET}`);
   console.log(`${CYAN}${BOLD}${'═'.repeat(width)}${RESET}`);
   console.log(`${DIM}  Zero dependencies. Free APIs only. Not financial advice.${RESET}`);
   console.log('');
 }
 
-/** Run one monitoring cycle — fetch all signals, score, and alert. */
+/** Run one monitoring cycle — fetch signals + macro, score, and send briefing. */
 async function runCycle(): Promise<void> {
   const config = loadConfig();
   const now = new Date().toISOString();
 
-  console.log(`${CYAN}── scan ${now} ──${RESET}`);
+  console.log(`${CYAN}── briefing ${now} ──${RESET}`);
 
-  // Fetch all signals in parallel
-  const signals = await Promise.all([
-    fetchVIX(),
-    fetchCrypto(),
-    fetchNews(),
-    fetchMarket(),
+  // Fetch signals and macro data in parallel
+  const [signals, macro] = await Promise.all([
+    Promise.all([fetchVIX(), fetchCrypto(), fetchNews(), fetchMarket()]),
+    fetchMacro(),
   ]);
 
   // Compute weighted danger score
@@ -85,10 +93,10 @@ async function runCycle(): Promise<void> {
   } else if (dangerScore >= config.thresholds.danger_score_watch) {
     level = 'WATCH';
   } else {
-    // Below watch threshold — just print summary to terminal
-    printQuietSummary(signals, dangerScore);
-    return;
+    level = 'WATCH'; // Still send briefing even when calm
   }
+
+  const action = getAction(dangerScore);
 
   const payload: AlertPayload = {
     level,
@@ -99,22 +107,12 @@ async function runCycle(): Promise<void> {
       detail: s.detail,
     })),
     timestamp: now,
+    action,
+    macro,
   };
 
+  // Always send the full briefing — every 6 hours, every cycle
   await sendAlert(payload);
-}
-
-/** Print a quiet summary when nothing is triggered. */
-function printQuietSummary(
-  signals: { name: string; score: number; detail: string }[],
-  dangerScore: number
-): void {
-  const color = dangerScore > 15 ? YELLOW : GREEN;
-  console.log(`${color}  Danger: ${dangerScore}/100 — all clear${RESET}`);
-  for (const s of signals) {
-    console.log(`${DIM}    ${s.name.padEnd(10)} ${String(s.score).padStart(3)}/100  ${s.detail}${RESET}`);
-  }
-  console.log('');
 }
 
 /** Main entry point — banner + interval loop with clean shutdown. */
@@ -122,7 +120,10 @@ async function main(): Promise<void> {
   printBanner();
 
   const config = loadConfig();
-  console.log(`${YELLOW}  Check interval: ${config.check_interval_ms / 1000}s${RESET}`);
+  const intervalMs = config.check_interval_ms;
+  const hours = (intervalMs / 1000 / 60 / 60).toFixed(1);
+
+  console.log(`${YELLOW}  Briefing interval: every ${hours} hours${RESET}`);
   console.log(`${YELLOW}  Thresholds — EXIT: ${config.thresholds.danger_score_exit} | WARN: ${config.thresholds.danger_score_warning} | WATCH: ${config.thresholds.danger_score_watch}${RESET}`);
   console.log('');
 
@@ -136,7 +137,7 @@ async function main(): Promise<void> {
     } catch (err: any) {
       console.error(`${RED}Cycle error: ${err.message}${RESET}`);
     }
-  }, config.check_interval_ms);
+  }, intervalMs);
 
   // Clean shutdown on SIGINT/SIGTERM
   const shutdown = () => {
