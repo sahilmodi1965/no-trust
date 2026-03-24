@@ -10,6 +10,7 @@ interface MarketData {
   price: number;
   changePct: number;
   assessment: string;
+  action: string;
 }
 
 /** Fetch index data from Yahoo Finance. */
@@ -42,6 +43,16 @@ function assess(changePct: number, context: string): string {
   return `Surging. ${context}`;
 }
 
+/** Map per-market change to an individual action recommendation. */
+function marketAction(changePct: number): string {
+  if (changePct <= -5) return '🔴 SELL EVERYTHING';
+  if (changePct <= -3) return '🟠 SELL A FEW THINGS';
+  if (changePct <= -1) return '🟡 HOLD STEADY';
+  if (changePct <= 1) return '🟡 HOLD STEADY';
+  if (changePct <= 3) return '🟢 BUY SOMETHING';
+  return '💚 BUY MORE';
+}
+
 /** Fetch macro data for US, China, and India. */
 export async function fetchMacro(): Promise<MarketData[]> {
   const markets: MarketData[] = [];
@@ -56,9 +67,10 @@ export async function fetchMacro(): Promise<MarketData[]> {
       price: us.price,
       changePct: us.changePct,
       assessment: assess(us.changePct, 'Fed policy and earnings in focus.'),
+      action: marketAction(us.changePct),
     });
   } catch {
-    markets.push({ name: 'United States', flag: '🇺🇸', index: 'S&P 500', price: 0, changePct: 0, assessment: '⚠ Data unavailable' });
+    markets.push({ name: 'United States', flag: '🇺🇸', index: 'S&P 500', price: 0, changePct: 0, assessment: '⚠ Data unavailable', action: '🟡 HOLD STEADY' });
   }
 
   // China — Shanghai Composite
@@ -71,9 +83,10 @@ export async function fetchMacro(): Promise<MarketData[]> {
       price: cn.price,
       changePct: cn.changePct,
       assessment: assess(cn.changePct, 'Trade and property sector signals.'),
+      action: marketAction(cn.changePct),
     });
   } catch {
-    markets.push({ name: 'China', flag: '🇨🇳', index: 'SSE Composite', price: 0, changePct: 0, assessment: '⚠ Data unavailable' });
+    markets.push({ name: 'China', flag: '🇨🇳', index: 'SSE Composite', price: 0, changePct: 0, assessment: '⚠ Data unavailable', action: '🟡 HOLD STEADY' });
   }
 
   // India — NIFTY 50
@@ -86,9 +99,10 @@ export async function fetchMacro(): Promise<MarketData[]> {
       price: ind.price,
       changePct: ind.changePct,
       assessment: assess(ind.changePct, 'Domestic flows and rupee watch.'),
+      action: marketAction(ind.changePct),
     });
   } catch {
-    markets.push({ name: 'India', flag: '🇮🇳', index: 'NIFTY 50', price: 0, changePct: 0, assessment: '⚠ Data unavailable' });
+    markets.push({ name: 'India', flag: '🇮🇳', index: 'NIFTY 50', price: 0, changePct: 0, assessment: '⚠ Data unavailable', action: '🟡 HOLD STEADY' });
   }
 
   return markets;

@@ -15,6 +15,7 @@ export interface MacroData {
   price: number;
   changePct: number;
   assessment: string;
+  action?: string;
 }
 
 export interface AlertPayload {
@@ -67,7 +68,7 @@ function formatMessage(payload: AlertPayload): string {
     lines.push('─────────────────');
     for (const m of payload.macro) {
       const sign = m.changePct >= 0 ? '+' : '';
-      lines.push(`${m.flag} ${m.name}`);
+      lines.push(`${m.flag} ${m.name} → ${m.action ?? '🟡 HOLD STEADY'}`);
       lines.push(`   ${m.index}: ${m.price > 0 ? m.price.toLocaleString() : 'N/A'} (${sign}${m.changePct.toFixed(2)}%)`);
       lines.push(`   ${m.assessment}`);
     }
