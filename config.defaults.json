@@ -1,0 +1,14 @@
+{
+  "thresholds": {
+    "danger_score_exit": 75,
+    "danger_score_warning": 50,
+    "danger_score_watch": 30
+  },
+  "check_interval_ms": 300000,
+  "signal_weights": {
+    "vix": 0.3,
+    "crypto": 0.25,
+    "news": 0.25,
+    "market": 0.2
+  }
+}
