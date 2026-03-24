@@ -1,0 +1,30 @@
+name: no-trust market briefing
+
+on:
+  schedule:
+    # Every 6 hours: midnight, 6am, noon, 6pm UTC
+    - cron: '0 0,6,12,18 * * *'
+  workflow_dispatch: # Manual trigger from GitHub UI
+
+jobs:
+  briefing:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run one briefing cycle
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          # Write config.local.json from secrets
+          echo "{\"telegram_token\":\"$TELEGRAM_TOKEN\",\"telegram_chat_id\":\"$TELEGRAM_CHAT_ID\",\"discord_webhook\":null}" > config.local.json
+          # Run one cycle then exit
+          npx tsx monitor.ts &
+          PID=$!
+          sleep 45
+          kill $PID 2>/dev/null || true
