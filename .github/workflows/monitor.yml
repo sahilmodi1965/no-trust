@@ -2,8 +2,8 @@ name: no-trust market briefing
 
 on:
   schedule:
-    # Every 6 hours: midnight, 6am, noon, 6pm UTC
-    - cron: '0 0,6,12,18 * * *'
+    # Once daily at 8am EST (12:00 UTC)
+    - cron: '0 12 * * *'
   workflow_dispatch: # Manual trigger from GitHub UI
 
 jobs:
