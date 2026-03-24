@@ -30,9 +30,11 @@ const rl = createInterface({
 
 /** Prompt the user for input, return their answer. */
 function ask(question: string): Promise<string> {
-  return new Promise((resolve) => {
-    rl.question(`${CYAN}${question}${RESET} `, (answer) => {
-      resolve(answer.trim());
+  return new Promise((res) => {
+    // Write prompt manually to avoid ANSI codes breaking readline cursor math
+    process.stdout.write(`${CYAN}${question}${RESET} `);
+    rl.once('line', (answer) => {
+      res(answer.trim());
     });
   });
 }
